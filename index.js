@@ -30,8 +30,10 @@ app.post('/convert-svg', async (req, res) => {
         // Criar a pasta 'temp' se não existir
         fs.mkdirSync(path.join(__dirname, 'temp'), { recursive: true });
 
-        // Salvar a imagem no sistema de arquivos
-        fs.writeFileSync(filePath, pngBuffer);
+        // Adicionando logs de depuração para verificação do salvamento do arquivo
+        console.log(`Saving file at: ${filePath}`);  // Log para verificar o caminho onde o arquivo será salvo
+        fs.writeFileSync(filePath, pngBuffer);       // Salvar o arquivo PNG
+        console.log(`File saved successfully: ${filePath}`);  // Log para confirmar que o arquivo foi salvo
 
         // Retornar o link para download
         const downloadLink = `${req.protocol}://${req.get('host')}/download/${filename}`;
@@ -56,18 +58,20 @@ app.get('/download/:filename', (req, res) => {
         if (err) {
             res.status(500).send('Failed to download image');
         } else {
-            // Excluir o arquivo apenas depois do download completo
-            fs.unlink(filePath, (err) => {
-                if (err) {
-                    if (err.code === 'ENOENT') {
-                        console.error('File not found, no need to delete.');
+            // Excluir o arquivo após um pequeno delay para garantir que o download foi completo
+            setTimeout(() => {
+                fs.unlink(filePath, (err) => {
+                    if (err) {
+                        if (err.code === 'ENOENT') {
+                            console.error('File not found, no need to delete.');
+                        } else {
+                            console.error('Failed to delete file:', err);
+                        }
                     } else {
-                        console.error('Failed to delete file:', err);
+                        console.log('File deleted successfully');
                     }
-                } else {
-                    console.log('File deleted successfully');
-                }
-            });
+                });
+            }, 1000);  // Delay de 1 segundo antes de excluir o arquivo
         }
     });
 });
