@@ -45,16 +45,42 @@ app.post('/convert-svg', async (req, res) => {
 // Rota para servir a imagem para download
 app.get('/download/:filename', (req, res) => {
     const filePath = path.join(__dirname, 'temp', req.params.filename);
+
+    // Verificar se o arquivo existe antes de tentar servir para download
+    if (!fs.existsSync(filePath)) {
+        return res.status(404).send('File not found');
+    }
+
+    // Servir o arquivo para download
     res.download(filePath, (err) => {
         if (err) {
             res.status(500).send('Failed to download image');
+        } else {
+            // Excluir o arquivo apenas depois do download completo
+            fs.unlink(filePath, (err) => {
+                if (err) {
+                    if (err.code === 'ENOENT') {
+                        console.error('File not found, no need to delete.');
+                    } else {
+                        console.error('Failed to delete file:', err);
+                    }
+                } else {
+                    console.log('File deleted successfully');
+                }
+            });
         }
-
-        // Opcional: Excluir o arquivo após o download
-        fs.unlink(filePath, (err) => {
-            if (err) console.error('Failed to delete file:', err);
-        });
     });
+});
+
+// Verificação do conteúdo da pasta para fins de debug
+app.get('/debug/temp-contents', (req, res) => {
+    const tempDir = path.join(__dirname, 'temp');
+    if (fs.existsSync(tempDir)) {
+        const files = fs.readdirSync(tempDir);
+        res.json({ files });
+    } else {
+        res.status(404).send('Temp directory not found');
+    }
 });
 
 app.listen(port, () => {
