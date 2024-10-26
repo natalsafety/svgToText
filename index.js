@@ -17,9 +17,7 @@ app.post('/convert-svg', async (req, res) => {
         }
 
         // Converter o SVG para PNG
-        const pngBuffer = await sharp(Buffer.from(svg))
-            .png()
-            .toBuffer();
+        const pngBuffer = await sharp(Buffer.from(svg)).png().toBuffer();
 
         // Gerar um nome único para o arquivo
         const filename = `${uuidv4()}.png`;
@@ -28,61 +26,65 @@ app.post('/convert-svg', async (req, res) => {
         const filePath = path.join(__dirname, 'temp', filename);
 
         // Criar a pasta 'temp' se não existir
-        fs.mkdirSync(path.join(__dirname, 'temp'), { recursive: true });
+        await fs.promises.mkdir(path.join(__dirname, 'temp'), { recursive: true });
 
         // Adicionando logs de depuração para verificação do salvamento do arquivo
-        console.log(`Saving file at: ${filePath}`);  // Log para verificar o caminho onde o arquivo será salvo
-        fs.writeFileSync(filePath, pngBuffer);       // Salvar o arquivo PNG
-        console.log(`File saved successfully: ${filePath}`);  // Log para confirmar que o arquivo foi salvo
+        console.log(`Saving file at: ${filePath}`);
+        await fs.promises.writeFile(filePath, pngBuffer);
+        console.log(`File saved successfully: ${filePath}`);
 
         // Retornar o link para download
         const downloadLink = `${req.protocol}://${req.get('host')}/download/${filename}`;
         res.json({ downloadLink });
-
     } catch (error) {
+        console.error('Failed to convert SVG to image:', error);
         res.status(500).send('Failed to convert SVG to image');
     }
 });
 
 // Rota para servir a imagem para download
-app.get('/download/:filename', (req, res) => {
+app.get('/download/:filename', async (req, res) => {
     const filePath = path.join(__dirname, 'temp', req.params.filename);
 
-    // Verificar se o arquivo existe antes de tentar servir para download
-    if (!fs.existsSync(filePath)) {
-        return res.status(404).send('File not found');
-    }
+    try {
+        // Verificar se o arquivo existe antes de tentar servir para download
+        await fs.promises.access(filePath);
 
-    // Servir o arquivo para download
-    res.download(filePath, (err) => {
-        if (err) {
-            res.status(500).send('Failed to download image');
-        } else {
+        // Servir o arquivo para download
+        res.download(filePath, async (err) => {
+            if (err) {
+                return res.status(500).send('Failed to download image');
+            }
+
             // Excluir o arquivo após um pequeno delay para garantir que o download foi completo
-            setTimeout(() => {
-                fs.unlink(filePath, (err) => {
-                    if (err) {
-                        if (err.code === 'ENOENT') {
-                            console.error('File not found, no need to delete.');
-                        } else {
-                            console.error('Failed to delete file:', err);
-                        }
+            setTimeout(async () => {
+                try {
+                    await fs.promises.unlink(filePath);
+                    console.log('File deleted successfully');
+                } catch (unlinkErr) {
+                    if (unlinkErr.code === 'ENOENT') {
+                        console.error('File not found, no need to delete.');
                     } else {
-                        console.log('File deleted successfully');
+                        console.error('Failed to delete file:', unlinkErr);
                     }
-                });
-            }, 1000);  // Delay de 1 segundo antes de excluir o arquivo
-        }
-    });
+                }
+            }, 30000); // Delay de 1 segundo antes de excluir o arquivo
+        });
+    } catch (error) {
+        console.error('File not found for download:', error);
+        res.status(404).send('File not found');
+    }
 });
 
 // Verificação do conteúdo da pasta para fins de debug
-app.get('/debug/temp-contents', (req, res) => {
+app.get('/debug/temp-contents', async (req, res) => {
     const tempDir = path.join(__dirname, 'temp');
-    if (fs.existsSync(tempDir)) {
-        const files = fs.readdirSync(tempDir);
+
+    try {
+        const files = await fs.promises.readdir(tempDir);
         res.json({ files });
-    } else {
+    } catch (error) {
+        console.error('Failed to read temp directory contents:', error);
         res.status(404).send('Temp directory not found');
     }
 });
